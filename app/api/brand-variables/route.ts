@@ -60,19 +60,41 @@ export async function POST(req: Request) {
   try {
     const { variables } = await req.json();
     
-    console.log('API: Saving brand variables:', variables);
+    console.log('API: Saving brand variables:', Object.keys(variables));
     
-    // Create content for embedding
+    // Create content for embedding with length limits
     const variableText = Object.entries(variables)
       .filter(([key, value]) => typeof value === 'string' && value.trim() !== '')
-      .map(([key, value]) => `${key}: ${value}`)
+      .map(([key, value]) => {
+        // Truncate very long values to prevent embedding API issues
+        const truncatedValue = typeof value === 'string' && value.length > 500 
+          ? value.substring(0, 500) + '...' 
+          : value;
+        return `${key}: ${truncatedValue}`;
+      })
       .join('\n');
 
+    // Limit total content length
     const content = `User Brand Variables:\n${variableText}`;
+    const finalContent = content.length > 2000 
+      ? content.substring(0, 2000) + '...' 
+      : content;
     
-    // Generate embedding
-    console.log('API: Generating embedding...');
-    const vector = await embeddings.embedQuery(content);
+    console.log('API: Content length for embedding:', finalContent.length);
+    
+    // Generate embedding with error handling
+    let vector;
+    try {
+      console.log('API: Generating embedding...');
+      vector = await embeddings.embedQuery(finalContent);
+      console.log('API: Embedding generated successfully');
+    } catch (embedError) {
+      console.error('API: Embedding generation failed:', embedError);
+      
+      // Fallback: Save without embedding (use zero vector)
+      console.log('API: Using fallback zero vector');
+      vector = new Array(1024).fill(0); // BGE embedding size
+    }
     
     // Check if variables already exist
     let existingPointId = null;
@@ -106,10 +128,11 @@ export async function POST(req: Request) {
           id: pointId,
           vector: vector,
           payload: {
-            content: content,
+            content: finalContent,
             type: 'user_brand_variables',
-            variables: variables,
-            updatedAt: new Date().toISOString()
+            variables: variables, // Store full variables regardless of content truncation
+            updatedAt: new Date().toISOString(),
+            hasEmbedding: Array.isArray(vector) && vector.some(v => v !== 0)
           }
         }
       ]
