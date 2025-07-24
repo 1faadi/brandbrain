@@ -75,7 +75,7 @@ export default function BrandVariablesPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['foundation']));
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -169,17 +169,7 @@ export default function BrandVariablesPage() {
       : 'bg-amber-50 border-amber-200 text-amber-800'
   };
 
-  // Auto-save functionality
-  useEffect(() => {
-    if (!hasUnsavedChanges) return;
-
-    const autoSaveTimer = setTimeout(() => {
-      handleAutoSave();
-    }, 2000);
-
-    return () => clearTimeout(autoSaveTimer);
-  }, [brandVariables, hasUnsavedChanges]);
-
+  // Remove auto-save functionality
   useEffect(() => {
     loadBrandVariables();
   }, []);
@@ -209,43 +199,13 @@ export default function BrandVariablesPage() {
       [key]: value
     }));
     setHasUnsavedChanges(true);
-    setAutoSaveStatus('idle');
+    setSaveStatus('idle');
   };
 
-  const handleAutoSave = async () => {
-    if (!hasUnsavedChanges) return;
-    
-    try {
-      setAutoSaveStatus('saving');
-      
-      const response = await fetch('/api/brand-variables', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          variables: brandVariables
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setAutoSaveStatus('success');
-        setHasUnsavedChanges(false);
-        setTimeout(() => setAutoSaveStatus('idle'), 2000);
-      } else {
-        setAutoSaveStatus('error');
-      }
-    } catch (error) {
-      setAutoSaveStatus('error');
-      console.error('Auto-save error:', error);
-    }
-  };
-
-  const handleManualSave = async () => {
+  const handleSave = async () => {
     try {
       setIsSaving(true);
+      setSaveStatus('idle');
       
       const response = await fetch('/api/brand-variables', {
         method: 'POST',
@@ -260,15 +220,15 @@ export default function BrandVariablesPage() {
       const data = await response.json();
       
       if (data.success) {
+        setSaveStatus('success');
         setHasUnsavedChanges(false);
-        setAutoSaveStatus('success');
-        setTimeout(() => setAutoSaveStatus('idle'), 2000);
+        setTimeout(() => setSaveStatus('idle'), 3000);
       } else {
-        setAutoSaveStatus('error');
+        setSaveStatus('error');
       }
     } catch (error) {
-      setAutoSaveStatus('error');
-      console.error('Manual save error:', error);
+      setSaveStatus('error');
+      console.error('Save error:', error);
     } finally {
       setIsSaving(false);
     }
@@ -294,11 +254,11 @@ export default function BrandVariablesPage() {
       });
       
       setHasUnsavedChanges(false);
-      setAutoSaveStatus('success');
-      setTimeout(() => setAutoSaveStatus('idle'), 2000);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
       
     } catch (error) {
-      setAutoSaveStatus('error');
+      setSaveStatus('error');
       console.error('Error resetting brand variables:', error);
     } finally {
       setIsSaving(false);
@@ -411,27 +371,21 @@ export default function BrandVariablesPage() {
                   </span>
                 </div>
 
-                {/* Auto-save status */}
+                {/* Save status - removed auto-save indicators */}
                 <div className="flex items-center gap-2">
-                  {autoSaveStatus === 'saving' && (
-                    <div className="flex items-center gap-2 text-amber-600 text-sm">
-                      <Loader className="w-4 h-4 animate-spin" />
-                      Auto-saving...
-                    </div>
-                  )}
-                  {autoSaveStatus === 'success' && (
+                  {saveStatus === 'success' && (
                     <div className={`flex items-center gap-2 ${themeClasses.success} text-sm transition-colors duration-300`}>
                       <CheckCircle className="w-4 h-4" />
-                      Auto-saved
+                      Saved successfully
                     </div>
                   )}
-                  {autoSaveStatus === 'error' && (
+                  {saveStatus === 'error' && (
                     <div className={`flex items-center gap-2 ${themeClasses.error} text-sm transition-colors duration-300`}>
                       <AlertCircle className="w-4 h-4" />
                       Save failed
                     </div>
                   )}
-                  {hasUnsavedChanges && autoSaveStatus === 'idle' && (
+                  {hasUnsavedChanges && saveStatus === 'idle' && (
                     <div className={`text-xs ${themeClasses.text.muted} transition-colors duration-300`}>
                       Unsaved changes
                     </div>
@@ -447,19 +401,6 @@ export default function BrandVariablesPage() {
                 >
                   <RotateCcw className="w-4 h-4" />
                   Reset All
-                </button>
-                
-                <button
-                  onClick={handleManualSave}
-                  disabled={isSaving || !hasUnsavedChanges}
-                  className={`flex items-center gap-2 px-6 py-2 ${themeClasses.button.primary} rounded-lg transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {isSaving ? (
-                    <Loader className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  Save Now
                 </button>
               </div>
             </div>
@@ -555,10 +496,55 @@ export default function BrandVariablesPage() {
           })}
         </div>
 
+        {/* Floating Save Button */}
+        {hasUnsavedChanges && (
+          <div className="fixed bottom-6 right-6 z-50">
+            <div className={`${themeClasses.cardBackground} border rounded-lg p-4 shadow-lg transition-all duration-300`}>
+              <div className="flex items-center gap-3">
+                {saveStatus === 'success' && (
+                  <div className={`flex items-center gap-2 ${themeClasses.success} text-sm`}>
+                    <CheckCircle className="w-4 h-4" />
+                    Saved!
+                  </div>
+                )}
+                {saveStatus === 'error' && (
+                  <div className={`flex items-center gap-2 ${themeClasses.error} text-sm`}>
+                    <AlertCircle className="w-4 h-4" />
+                    Failed
+                  </div>
+                )}
+                {saveStatus === 'idle' && (
+                  <span className={`text-sm ${themeClasses.text.secondary}`}>
+                    You have unsaved changes
+                  </span>
+                )}
+                
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className={`flex items-center gap-2 px-4 py-2 ${themeClasses.button.primary} rounded-lg transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className={`mt-8 text-center ${themeClasses.cardBackground} border rounded-xl p-6 shadow-sm transition-colors duration-300`}>
           <p className={`${themeClasses.text.secondary} text-sm mb-4 transition-colors duration-300`}>
-            Your brand variables are automatically saved and will be used to provide personalized, brand-consistent responses.
+            Your brand variables will be used to provide personalized, brand-consistent responses.
           </p>
           <a 
             href="/brand" 
